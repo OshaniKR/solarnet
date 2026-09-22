@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+.env
+
+# Simulated data + generated reports (regenerated every run -- don't commit them)
+data/tariffs/*.csv
+data/tariffs/*.processed
+data/tariffs/.sim_state.json
+!data/tariffs/.gitkeep
+
+reports/*.csv
+!reports/.gitkeep
