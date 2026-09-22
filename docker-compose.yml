@@ -123,30 +123,30 @@ services:
   # ---------------------------------------------------------------------------
   # Speed layer: Spark Structured Streaming
   # ---------------------------------------------------------------------------
-  # spark-job:
-  #   build:
-  #     context: .
-  #     dockerfile: streaming/Dockerfile
-  #   restart: unless-stopped
-  #   depends_on:
-  #     kafka-init:
-  #       condition: service_completed_successfully
-  #     postgres:
-  #       condition: service_healthy
-  #   command:
-  #     - spark-submit
-  #     - --master
-  #     - local[*]
-  #     - --packages
-  #     - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.postgresql:postgresql:42.7.3
-  #     - streaming/spark_job.py
-  #   environment:
-  #     KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-  #     POSTGRES_HOST: postgres
-  #     POSTGRES_DB: ${POSTGRES_DB:-solarnet}
-  #     POSTGRES_USER: ${POSTGRES_USER:-solarnet}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solarnet}
-  #     PUSHGATEWAY_URL: http://pushgateway:9091
+  spark-job:
+    build:
+      context: .
+      dockerfile: streaming/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    command:
+      - spark-submit
+      - --master
+      - local[*]
+      - --packages
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.postgresql:postgresql:42.7.3
+      - streaming/spark_job.py
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-solarnet}
+      POSTGRES_USER: ${POSTGRES_USER:-solarnet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solarnet}
+      PUSHGATEWAY_URL: http://pushgateway:9091
 
   # ---------------------------------------------------------------------------
   # Batch layer: Airflow (standalone mode -- see README "Assumptions & simplifications")
