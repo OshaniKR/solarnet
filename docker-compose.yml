@@ -1,0 +1,207 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # Ingestion: Kafka + Zookeeper
+  # ---------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+
+  # One-shot: creates the two Kafka topics, then exits 0. Everything that needs
+  # Kafka waits on this via `condition: service_completed_successfully`.
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic meter_readings --partitions 4 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic meter_readings_dlq --partitions 1 --replication-factor 1
+        echo "Kafka topics ready"
+
+  # ---------------------------------------------------------------------------
+  # Storage: PostgreSQL (raw_readings, live_zone_metrics, tariffs, daily_bills, alerts)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-solarnet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solarnet}
+      POSTGRES_DB: ${POSTGRES_DB:-solarnet}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-solarnet}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  # ---------------------------------------------------------------------------
+  # Observability: Prometheus + Pushgateway
+  # ---------------------------------------------------------------------------
+  pushgateway:
+    image: prom/pushgateway:v1.9.0
+    restart: unless-stopped
+    ports:
+      - "9091:9091"
+
+  # prometheus:
+  #   image: prom/prometheus:v2.53.0
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - pushgateway
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #     - ./observability/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+
+  # ---------------------------------------------------------------------------
+  # Simulated data sources
+  # ---------------------------------------------------------------------------
+  meter-simulator:
+    build:
+      context: .
+      dockerfile: simulators/Dockerfile
+    restart: unless-stopped
+    command: ["python", "simulators/meter_sim.py"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SIM_DAY_SECONDS: ${SIM_DAY_SECONDS:-300}
+      NUM_HOUSEHOLDS: ${NUM_HOUSEHOLDS:-40}
+      PUSHGATEWAY_URL: http://pushgateway:9091
+
+  tariff-simulator:
+    build:
+      context: .
+      dockerfile: simulators/Dockerfile
+    restart: unless-stopped
+    command: ["python", "simulators/tariff_sim.py"]
+    volumes:
+      - ./data/tariffs:/data/tariffs
+    environment:
+      SIM_DAY_SECONDS: ${SIM_DAY_SECONDS:-300}
+      NUM_HOUSEHOLDS: ${NUM_HOUSEHOLDS:-40}
+      TARIFF_OUTPUT_DIR: /data/tariffs
+      PUSHGATEWAY_URL: http://pushgateway:9091
+
+  # ---------------------------------------------------------------------------
+  # Speed layer: Spark Structured Streaming
+  # ---------------------------------------------------------------------------
+  # spark-job:
+  #   build:
+  #     context: .
+  #     dockerfile: streaming/Dockerfile
+  #   restart: unless-stopped
+  #   depends_on:
+  #     kafka-init:
+  #       condition: service_completed_successfully
+  #     postgres:
+  #       condition: service_healthy
+  #   command:
+  #     - spark-submit
+  #     - --master
+  #     - local[*]
+  #     - --packages
+  #     - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.postgresql:postgresql:42.7.3
+  #     - streaming/spark_job.py
+  #   environment:
+  #     KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  #     POSTGRES_HOST: postgres
+  #     POSTGRES_DB: ${POSTGRES_DB:-solarnet}
+  #     POSTGRES_USER: ${POSTGRES_USER:-solarnet}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solarnet}
+  #     PUSHGATEWAY_URL: http://pushgateway:9091
+
+  # ---------------------------------------------------------------------------
+  # Batch layer: Airflow (standalone mode -- see README "Assumptions & simplifications")
+  # ---------------------------------------------------------------------------
+  # airflow:
+  #   build:
+  #     context: .
+  #     dockerfile: airflow/Dockerfile
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./airflow/dags:/opt/airflow/dags
+  #     - ./data/tariffs:/data/tariffs
+  #     - ./reports:/reports
+  #     - airflow_home:/opt/airflow
+  #   environment:
+  #     POSTGRES_HOST: postgres
+  #     POSTGRES_DB: ${POSTGRES_DB:-solarnet}
+  #     POSTGRES_USER: ${POSTGRES_USER:-solarnet}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solarnet}
+  #     TARIFF_INPUT_DIR: /data/tariffs
+  #     REPORT_OUTPUT_DIR: /reports
+  #     SIM_DAY_SECONDS: ${SIM_DAY_SECONDS:-300}
+  #     PUSHGATEWAY_URL: http://pushgateway:9091
+  #   command: ["airflow", "standalone"]
+
+  # ---------------------------------------------------------------------------
+  # Serving: FastAPI
+  # ---------------------------------------------------------------------------
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: api/Dockerfile
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - ./reports:/reports
+  #   environment:
+  #     POSTGRES_HOST: postgres
+  #     POSTGRES_DB: ${POSTGRES_DB:-solarnet}
+  #     POSTGRES_USER: ${POSTGRES_USER:-solarnet}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solarnet}
+  #     REPORT_DIR: /reports
+  #     NO_DATA_ALERT_MINUTES: ${NO_DATA_ALERT_MINUTES:-3}
+  #     LOW_SOLAR_SHARE_PCT: ${LOW_SOLAR_SHARE_PCT:-15}
+  #     SIM_DAY_SECONDS: ${SIM_DAY_SECONDS:-300}
+
+volumes:
+  pgdata:
+  # airflow_home:
