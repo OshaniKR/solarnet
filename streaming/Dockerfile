@@ -1,9 +1,12 @@
 FROM python:3.11-slim
 
 # spark-submit needs a JVM; pip-installed pyspark provides the rest of the Spark
-# distribution (including the spark-submit launcher itself).
+# distribution (including the spark-submit launcher itself). procps provides `ps`,
+# which Spark's own load-spark-env.sh shells out to on startup -- without it here
+# (python:3.11-slim has no `ps`), executor registration silently breaks and the
+# driver/executor heartbeat NPEs forever (BlockManagerId.executorId() on a null id).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends default-jdk-headless \
+    && apt-get install -y --no-install-recommends default-jdk-headless procps \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
