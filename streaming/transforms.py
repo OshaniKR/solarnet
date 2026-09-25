@@ -121,9 +121,11 @@ def aggregate_zone_metrics(
         .agg(
             F.sum("power_consumption_kwh").alias("total_load_kwh"),
             F.sum("solar_generation_kwh").alias("total_solar_kwh"),
-            F.countDistinct(
-                F.when(F.col("is_exporting"), F.col("household_id"))
-            ).alias("exporting_households"),
+            # Spark rejects exact distinct aggregations on streaming DataFrames;
+            # HyperLogLog++ is effectively exact at this cardinality (tens of households).
+            F.approx_count_distinct(
+                F.when(F.col("is_exporting"), F.col("household_id")), rsd=0.01
+            ).cast("int").alias("exporting_households"),
         )
     )
     return windowed.select(
