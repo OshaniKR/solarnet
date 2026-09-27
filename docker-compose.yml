@@ -77,16 +77,16 @@ services:
     ports:
       - "9091:9091"
 
-  # prometheus:
-  #   image: prom/prometheus:v2.53.0
-  #   restart: unless-stopped
-  #   depends_on:
-  #     - pushgateway
-  #   ports:
-  #     - "9090:9090"
-  #   volumes:
-  #     - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-  #     - ./observability/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    restart: unless-stopped
+    depends_on:
+      - pushgateway
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
 
   # ---------------------------------------------------------------------------
   # Simulated data sources

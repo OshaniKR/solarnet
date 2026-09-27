@@ -1,7 +1,4 @@
 -- SolarNet schema.
--- Mounted into /docker-entrypoint-initdb.d by docker-compose.yml, so Postgres applies
--- it automatically the FIRST time the `pgdata` volume is created. If you change this
--- file after the volume already exists, run: docker compose down -v   (see README).
 
 CREATE TABLE IF NOT EXISTS raw_readings (
     id                    BIGSERIAL PRIMARY KEY,
