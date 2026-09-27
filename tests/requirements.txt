@@ -1,0 +1,4 @@
+pytest==8.3.3
+# pyspark is optional -- test_spark_transform.py skips itself if it isn't installed.
+# It's a large dependency; only install it if you want to run that one test file.
+pyspark==3.5.1

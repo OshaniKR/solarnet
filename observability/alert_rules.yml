@@ -1,0 +1,40 @@
+
+
+groups:
+  - name: solarnet-alerts
+    rules:
+      # Alert 1: no data received in N minutes.
+      - alert: NoMeterDataReceived
+        expr: solarnet_last_reading_age_seconds > 180
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No smart-meter readings received recently"
+          description: >
+            solarnet_last_reading_age_seconds has been above 180s for over a minute.
+            Check the meter-simulator container and the Kafka -> Spark path.
+
+      # Alert 2: zone solar share below X% during daytime.
+      - alert: LowSolarShareDuringDaytime
+        expr: solarnet_zone_solar_share_pct < 15
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zone {{ $labels.grid_zone }} solar share is unusually low"
+          description: >
+            solarnet_zone_solar_share_pct for zone {{ $labels.grid_zone }} has been
+            below 15% for 2 minutes during simulated daytime hours.
+
+      # Alert 3: Airflow DAG failure (or an invalid tariff file, which also fails the DAG).
+      - alert: BillingDagFailed
+        expr: airflow_dag_last_run_status == 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The daily billing Airflow DAG failed"
+          description: >
+            airflow_dag_last_run_status is 0, meaning the most recent billing DAG
+            run failed. Check GET /alerts and the Airflow UI at :8080 for details.
