@@ -77,16 +77,16 @@ services:
     ports:
       - "9091:9091"
 
-  # prometheus:
-  #   image: prom/prometheus:v2.53.0
-  #   restart: unless-stopped
-  #   depends_on:
-  #     - pushgateway
-  #   ports:
-  #     - "9090:9090"
-  #   volumes:
-  #     - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-  #     - ./observability/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    restart: unless-stopped
+    depends_on:
+      - pushgateway
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
 
   # ---------------------------------------------------------------------------
   # Simulated data sources
@@ -151,57 +151,57 @@ services:
   # ---------------------------------------------------------------------------
   # Batch layer: Airflow (standalone mode -- see README "Assumptions & simplifications")
   # ---------------------------------------------------------------------------
-  # airflow:
-  #   build:
-  #     context: .
-  #     dockerfile: airflow/Dockerfile
-  #   restart: unless-stopped
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   ports:
-  #     - "8080:8080"
-  #   volumes:
-  #     - ./airflow/dags:/opt/airflow/dags
-  #     - ./data/tariffs:/data/tariffs
-  #     - ./reports:/reports
-  #     - airflow_home:/opt/airflow
-  #   environment:
-  #     POSTGRES_HOST: postgres
-  #     POSTGRES_DB: ${POSTGRES_DB:-solarnet}
-  #     POSTGRES_USER: ${POSTGRES_USER:-solarnet}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solarnet}
-  #     TARIFF_INPUT_DIR: /data/tariffs
-  #     REPORT_OUTPUT_DIR: /reports
-  #     SIM_DAY_SECONDS: ${SIM_DAY_SECONDS:-300}
-  #     PUSHGATEWAY_URL: http://pushgateway:9091
-  #   command: ["airflow", "standalone"]
+  airflow:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./data/tariffs:/data/tariffs
+      - ./reports:/reports
+      - airflow_home:/opt/airflow
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-solarnet}
+      POSTGRES_USER: ${POSTGRES_USER:-solarnet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solarnet}
+      TARIFF_INPUT_DIR: /data/tariffs
+      REPORT_OUTPUT_DIR: /reports
+      SIM_DAY_SECONDS: ${SIM_DAY_SECONDS:-300}
+      PUSHGATEWAY_URL: http://pushgateway:9091
+    command: ["airflow", "standalone"]
 
   # ---------------------------------------------------------------------------
   # Serving: FastAPI
   # ---------------------------------------------------------------------------
-  # api:
-  #   build:
-  #     context: .
-  #     dockerfile: api/Dockerfile
-  #   restart: unless-stopped
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   ports:
-  #     - "8000:8000"
-  #   volumes:
-  #     - ./reports:/reports
-  #   environment:
-  #     POSTGRES_HOST: postgres
-  #     POSTGRES_DB: ${POSTGRES_DB:-solarnet}
-  #     POSTGRES_USER: ${POSTGRES_USER:-solarnet}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solarnet}
-  #     REPORT_DIR: /reports
-  #     NO_DATA_ALERT_MINUTES: ${NO_DATA_ALERT_MINUTES:-3}
-  #     LOW_SOLAR_SHARE_PCT: ${LOW_SOLAR_SHARE_PCT:-15}
-  #     SIM_DAY_SECONDS: ${SIM_DAY_SECONDS:-300}
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./reports:/reports
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-solarnet}
+      POSTGRES_USER: ${POSTGRES_USER:-solarnet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-solarnet}
+      REPORT_DIR: /reports
+      NO_DATA_ALERT_MINUTES: ${NO_DATA_ALERT_MINUTES:-3}
+      LOW_SOLAR_SHARE_PCT: ${LOW_SOLAR_SHARE_PCT:-15}
+      SIM_DAY_SECONDS: ${SIM_DAY_SECONDS:-300}
 
 volumes:
   pgdata:
-  # airflow_home:
+  airflow_home:
